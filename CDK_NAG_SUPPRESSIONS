@@ -1,0 +1,34 @@
+The following rule are applied to suppress cdk_nag errors:
+* NagSuppressions.add_resource_suppressions(pipeline.pipeline.artifact_bucket, [
+            dict(
+                id = 'AwsSolutions-S1', 
+                reason = 'Artifact bucket is created by codepipelines Construct and we have no control on it to enable logging' 
+            )
+            ],
+  );
+
+This rule to suppress "AwsSolutions-S1: The S3 Bucket has server access logs disabled." error returned on the artifact bucket created by CodePipeline CDK module where we don't have control
+
+* NagSuppressions.add_resource_suppressions(pipeline, [
+            dict(
+                id = 'AwsSolutions-IAM5', 
+                reason = 'Suppressing errors due to CodePipeline default IAM policy' 
+            )
+            ],
+            apply_to_children=True
+ );
+
+This rule is to suppress several "AwsSolutions-IAM5: The IAM entity contains wildcard permissions and does not have a cdk-nag rule suppression with evidence for those permission." due to the default policy used by CodePipeline CDK module
+
+
+* NagSuppressions.add_resource_suppressions(pipeline, [
+            dict(
+                id = 'AwsSolutions-CB4', 
+                reason = 'Suppressing errors due to CodeBuild defaults defined by CodePipeline' 
+            )
+            ],
+            apply_to_children=True
+ );
+
+This rule is to suppress "AwsSolutions-CB4: The CodeBuild project does not use an AWS KMS key for encryption." since the CodeBuild project is created by CodePipeline CDK module and we can't control the configuration
+

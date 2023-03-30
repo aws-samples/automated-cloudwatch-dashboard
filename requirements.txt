@@ -1,0 +1,5 @@
+aws-cdk-lib==2.55.1
+constructs>=10.0.0,<11.0.0
+omegaconf
+boto3
+cdk_nag
