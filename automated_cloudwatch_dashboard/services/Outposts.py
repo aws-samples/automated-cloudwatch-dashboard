@@ -74,6 +74,10 @@ class Outposts():
             return []
         
         for outpost in self.outposts:
+            # Skip if the Outpost is not in Active state
+            if( outpost['LifeCycleStatus'] != 'ACTIVE' ):
+                continue
+
             outpost_id = outpost['OutpostId']
             outpost_name = outpost['Name']        
             markdown = f'### Outpost {outpost_id} - {outpost_name}'
