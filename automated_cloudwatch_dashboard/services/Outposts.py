@@ -88,8 +88,11 @@ class Outposts():
                 width = 24
             )
             widgetRows.append(label)
-            # Instance Types Capacity
-            instance_types_widget = self.get_instance_types_widget(outpost)
+            # Instance Types Available
+            instance_types_widget = self.get_instance_types_available_widget(outpost)
+            widgetRows.append(cloudwatch.Row(instance_types_widget))
+            # Instance Types Used
+            instance_types_widget = self.get_instance_types_used_widget(outpost)
             widgetRows.append(cloudwatch.Row(instance_types_widget))
             # EBS capacity
             ebs_capacity_widget = self.get_ebs_capacity_widget(outpost)
@@ -196,7 +199,35 @@ class Outposts():
             view=cloudwatch.GraphWidgetView.PIE,
         )
 
-    def get_instance_types_widget(self, outpost):
+    def get_instance_types_available_widget(self, outpost):
+        metric_array = []
+        outpost_id = outpost['OutpostId']
+        outpost_name = outpost['Name']
+        account = outpost['OwnerId']
+
+        for instance_type_obj in self.instance_types[outpost_id]:
+            instance_type = instance_type_obj['InstanceType']
+            metric_array.append(cloudwatch.Metric(
+                    namespace = self.namespace,
+                    metric_name = 'AvailableInstanceType_Count',
+                    account = account,
+                    dimensions_map = dict(
+                        OutpostId = outpost_id,
+                        InstanceType = instance_type
+                    ),
+                    statistic = 'Average',
+                    period = cdk.Duration.minutes(5),
+                    label = f'{instance_type}'
+                ))
+        return cloudwatch.GraphWidget( 
+            title=f'EC2 Available - {outpost_name}',
+            left = metric_array,
+            legend_position=cloudwatch.LegendPosition.BOTTOM,
+            height = 6,
+            width = 12,
+        )    
+
+    def get_instance_types_used_widget(self, outpost):
         metric_array = []
         outpost_id = outpost['OutpostId']
         outpost_name = outpost['Name']
@@ -214,25 +245,12 @@ class Outposts():
                     ),
                     statistic = 'Average',
                     period = cdk.Duration.minutes(5),
-                    label = f'{instance_type}-Used'
-                ))
-            metric_array.append(cloudwatch.Metric(
-                    namespace = self.namespace,
-                    metric_name = 'AvailableInstanceType_Count',
-                    account = account,
-                    dimensions_map = dict(
-                        OutpostId = outpost_id,
-                        InstanceType = instance_type
-                    ),
-                    statistic = 'Average',
-                    period = cdk.Duration.minutes(5),
-                    label = f'{instance_type}-Avail'
+                    label = f'{instance_type}'
                 ))
         return cloudwatch.GraphWidget( 
-            title=f'EC2 Capacity - {outpost_name}',
+            title=f'EC2 Used - {outpost_name}',
             left = metric_array,
             legend_position=cloudwatch.LegendPosition.BOTTOM,
             height = 6,
-            width = 24,
-            view=cloudwatch.GraphWidgetView.BAR
+            width = 12,
         )          
