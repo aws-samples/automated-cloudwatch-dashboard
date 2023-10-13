@@ -18,6 +18,7 @@ import aws_cdk as cdk
 import boto3
 from botocore.config import Config
 import aws_cdk.aws_cloudwatch as cloudwatch
+import random
 
 class Outposts():
     def __init__(self, region: str, tag: str, tag_values: list):
@@ -67,6 +68,15 @@ class Outposts():
             pass
         return instance_types
 
+    def get_colors(self, outpost):
+        colors = {}
+        outpost_id = outpost['OutpostId']
+        for instance_type_obj in self.instance_types[outpost_id]:
+            instance_type = instance_type_obj['InstanceType']
+            color = "%06x" % random.randint(0, 0xFFFFFF)
+            colors[instance_type] = "#" + color
+        return colors
+    
     def get_widgets(self):
         widgetRows = []
 
@@ -81,6 +91,8 @@ class Outposts():
             outpost_id = outpost['OutpostId']
             outpost_name = outpost['Name']        
             markdown = f'### Outpost {outpost_id} - {outpost_name}'
+            #Fix colors for each instance type for consistency
+            colors = self.get_colors(outpost)
             # Header line with instance name, id and type
             label = cloudwatch.TextWidget(
                 markdown = markdown,
@@ -88,12 +100,16 @@ class Outposts():
                 width = 24
             )
             widgetRows.append(label)
+            # 1st Row
             # Instance Types Available
-            instance_types_widget = self.get_instance_types_available_widget(outpost)
-            widgetRows.append(cloudwatch.Row(instance_types_widget))
+            instance_types_avail_widget = self.get_instance_types_available_widget(outpost, colors)
             # Instance Types Used
-            instance_types_widget = self.get_instance_types_used_widget(outpost)
-            widgetRows.append(cloudwatch.Row(instance_types_widget))
+            instance_types_used_widget = self.get_instance_types_used_widget(outpost, colors)
+            # Instance Types Total 
+            instance_types_tot_widget = self.get_instance_types_total_widget(outpost, colors)
+            widgetRows.append(cloudwatch.Row(instance_types_avail_widget, instance_types_used_widget, instance_types_tot_widget))
+
+            # 2nd Row
             # EBS capacity
             ebs_capacity_widget = self.get_ebs_capacity_widget(outpost)
             # S3 Capacity 
@@ -101,7 +117,6 @@ class Outposts():
             #ConnectedStatus
             conn_status_widget = self.get_conn_status_widget(outpost)
             widgetRows.append(cloudwatch.Row(ebs_capacity_widget, s3_capacity_widget,conn_status_widget))
-
 
         return widgetRows
 
@@ -199,7 +214,7 @@ class Outposts():
             view=cloudwatch.GraphWidgetView.PIE,
         )
 
-    def get_instance_types_available_widget(self, outpost):
+    def get_instance_types_available_widget(self, outpost, colors):
         metric_array = []
         outpost_id = outpost['OutpostId']
         outpost_name = outpost['Name']
@@ -211,6 +226,7 @@ class Outposts():
                     namespace = self.namespace,
                     metric_name = 'AvailableInstanceType_Count',
                     account = account,
+                    color = colors[instance_type],
                     dimensions_map = dict(
                         OutpostId = outpost_id,
                         InstanceType = instance_type
@@ -224,10 +240,10 @@ class Outposts():
             left = metric_array,
             legend_position=cloudwatch.LegendPosition.BOTTOM,
             height = 6,
-            width = 12,
+            width = 9,
         )    
 
-    def get_instance_types_used_widget(self, outpost):
+    def get_instance_types_used_widget(self, outpost, colors):
         metric_array = []
         outpost_id = outpost['OutpostId']
         outpost_name = outpost['Name']
@@ -239,6 +255,7 @@ class Outposts():
                     namespace = self.namespace,
                     metric_name = 'UsedInstanceType_Count',
                     account = account,
+                    color = colors[instance_type],
                     dimensions_map = dict(
                         OutpostId = outpost_id,
                         InstanceType = instance_type
@@ -252,5 +269,61 @@ class Outposts():
             left = metric_array,
             legend_position=cloudwatch.LegendPosition.BOTTOM,
             height = 6,
-            width = 12,
-        )          
+            width = 9,
+        )
+
+    def get_instance_types_total_widget(self, outpost, colors):
+        metric_array = []
+        outpost_id = outpost['OutpostId']
+        outpost_name = outpost['Name']
+        account = outpost['OwnerId']
+
+        for instance_type_obj in self.instance_types[outpost_id]:
+            instance_type = instance_type_obj['InstanceType']
+            metric1 = instance_type + "Avail"
+            metric2 = instance_type + "Used"
+            metric1 = metric1.replace(".","")
+            metric2 = metric2.replace(".","")
+            
+            exp_string = metric1 + " + " + metric2
+
+            metric_array.append( cloudwatch.MathExpression(
+                expression= exp_string,
+                color = colors[instance_type],
+                using_metrics={
+                    metric1: cloudwatch.Metric  (
+                        namespace = self.namespace,
+                        metric_name = 'AvailableInstanceType_Count',
+                        account = account,
+                        dimensions_map = dict(
+                            OutpostId = outpost_id,
+                            InstanceType = instance_type
+                        ),
+                        statistic = 'Average',
+                        period = cdk.Duration.minutes(5),
+                        label = f'{instance_type}-Used'
+                        ),
+                    metric2: cloudwatch.Metric(
+                        namespace = self.namespace,
+                        metric_name = 'UsedInstanceType_Count',
+                        account = account,
+                        dimensions_map = dict(
+                            OutpostId = outpost_id,
+                            InstanceType = instance_type
+                        ),
+                        statistic = 'Average',
+                        period = cdk.Duration.minutes(5),
+                        label = f'{instance_type}-Avail'
+                        )
+                    },
+                period = cdk.Duration.minutes(5),
+                label = f'{instance_type}-Tot'
+                )
+            )
+        return cloudwatch.GraphWidget(
+            title=f'EC2 Total - {outpost_name}',
+            left = metric_array,
+            legend_position=cloudwatch.LegendPosition.BOTTOM,
+            height = 6,
+            width = 6,
+        )                    
